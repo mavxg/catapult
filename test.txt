@@ -1,0 +1,3 @@
+gets /outbound/MRA02 /Endpoints/Test/inbox /Endpoints/Test/processed /Endpoints/Test/error
+puts /Endpoints/Test/outbox /MRA01 /Endpoints/Test/sent
+list /outbound/MRA02
