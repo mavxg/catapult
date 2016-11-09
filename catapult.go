@@ -4,6 +4,9 @@ import (
 	//"byte"
 	//"crypto/x509"
 	"bufio"
+	"crypto/x509"
+	"encoding/pem"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -152,6 +155,44 @@ func init() {
 	flag.StringVar(&keyfile, "keyfile", "", "keyfile path")
 }
 
+func encryptedBlock(block *pem.Block) bool {
+	return strings.Contains(block.Headers["Proc-Type"], "ENCRYPTED")
+}
+
+func ParsePrivateKey(file string, passphrase string) (interface{}, error) {
+	pemBytes, err := ioutil.ReadFile(file)
+	if err != nil {
+		return nil, err
+	}
+
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, errors.New("ssh: no key found in keyfile")
+	}
+
+	if encryptedBlock(block) {
+		bytes, err := x509.DecryptPEMBlock(block, []byte(passphrase))
+		if err != nil || bytes == nil {
+			return nil, errors.New("ssh: could not decrypt keyfile")
+		}
+
+		key, err := x509.ParsePKCS8PrivateKey(bytes)
+		if err == nil {
+			return key, nil
+		}
+
+		key, err = x509.ParsePKCS1PrivateKey(bytes)
+		if err == nil {
+			return key, nil
+		}
+
+		return nil, errors.New("ssh: key decryption failed")
+
+	}
+
+	return ssh.ParseRawPrivateKey(pemBytes)
+}
+
 func main() {
 	flag.Parse()
 
@@ -171,8 +212,15 @@ func main() {
 	var auths []ssh.AuthMethod
 
 	if keyfile != "" {
-		//TODO: open keyfile
-		auths = append(auths, ssh.Password(password))
+		key, err := ParsePrivateKey(keyfile, passphrase)
+		if err != nil {
+			panic(err)
+		}
+		signer, err := ssh.NewSignerFromKey(key)
+		if err != nil {
+			panic(err)
+		}
+		auths = append(auths, ssh.PublicKeys(signer))
 
 		os.Exit(0)
 	}
