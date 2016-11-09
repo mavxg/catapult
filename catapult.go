@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path"
 	"regexp"
@@ -46,6 +47,10 @@ func list(conn *ssh.Client, args []string) {
 	defer c.Close()
 
 	files, err := c.ReadDir(p)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
 	for _,file := range files {
 		name := file.Name()
 		matched,_ := path.Match(m, name)
@@ -66,6 +71,12 @@ func gets(conn *ssh.Client, args []string) {
 	local := args[1]
 	alts := args[1:] //include local in this to simplify logic
 
+	ls, err := os.Stat(local)
+	if err != nil || !(ls.IsDir()) {
+		fmt.Fprintln(os.Stderr, "local (to) directory doesn't exist")
+		return
+	}
+
 	if m == "" {
 		m = "*"
 	}
@@ -78,7 +89,18 @@ func gets(conn *ssh.Client, args []string) {
 
 	fmt.Println(frm, m, local, alts) //TODO: remove
 
-	//TODO
+	files, err := c.ReadDir(frm)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	for _,file := range files {
+		name := file.Name()
+		matched,_ := path.Match(m, name)
+		if matched {
+			//TODO: get the file
+		}
+	}
 }
 
 func puts(conn *ssh.Client, args []string) {
@@ -96,6 +118,12 @@ func puts(conn *ssh.Client, args []string) {
 		m = "*"
 	}
 
+	ls, err := os.Stat(sent)
+	if err != nil || !(ls.IsDir()) {
+		fmt.Fprintln(os.Stderr, "sentbox directory doesn't exist")
+		return
+	}
+
 	c, err := sftp.NewClient(conn)
 	if err != nil {
 		panic(err)
@@ -103,8 +131,19 @@ func puts(conn *ssh.Client, args []string) {
 	defer c.Close()
 
 	fmt.Println(frm, m, remote, sent) //TODO: remove
-
-	//TODO
+	files, err := ioutil.ReadDir(frm)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	for _,file := range files {
+		name := file.Name()
+		matched,_ := path.Match(m, name)
+		if matched {
+			//TODO: put the file
+			//move to sent box
+		}
+	}
 }
 
 func init() {
@@ -134,6 +173,8 @@ func main() {
 	if keyfile != "" {
 		//TODO: open keyfile
 		auths = append(auths, ssh.Password(password))
+
+		os.Exit(0)
 	}
 
 	if password != "" {
