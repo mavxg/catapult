@@ -7,14 +7,16 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path"
 	"regexp"
 	"strings"
+
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
 //catapult [-keyfile=... [-passphrase=..] | -password=.. ] user@server:port
 
-var client *ssh.Client
 var password string
 var passphrase string
 var keyfile string
@@ -23,6 +25,86 @@ func usage() {
 	fmt.Fprintf(os.Stderr,"catapult <flags> user@server:port\n")
 	fmt.Fprintln(os.Stderr,"")
 	fmt.Fprintln(os.Stderr,"Note: flags must come before connection string")
+}
+
+func list(conn *ssh.Client, args []string) {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "USAGE: list/[pattern] dir")
+		return
+	}
+
+	p, m := path.Split(args[0])
+
+	if m == "" {
+		m = "*"
+	}
+
+	c, err := sftp.NewClient(conn)
+	if err != nil {
+		panic(err)
+	}
+	defer c.Close()
+
+	files, err := c.ReadDir(p)
+	for _,file := range files {
+		name := file.Name()
+		matched,_ := path.Match(m, name)
+		if matched {
+			fmt.Println(path.Join(p, name))
+		}
+	}
+}
+
+func gets(conn *ssh.Client, args []string) {
+	if len(args) < 2 {
+		fmt.Fprintln(os.Stderr, "USAGE: gets from/[pattern] to [alts]")
+		fmt.Fprintln(os.Stderr, "       note that from must end in a / unless it has a match pattern")
+		return
+	}
+
+	frm, m := path.Split(args[0])
+	local := args[1]
+	alts := args[1:] //include local in this to simplify logic
+
+	if m == "" {
+		m = "*"
+	}
+
+	c, err := sftp.NewClient(conn)
+	if err != nil {
+		panic(err)
+	}
+	defer c.Close()
+
+	fmt.Println(frm, m, local, alts) //TODO: remove
+
+	//TODO
+}
+
+func puts(conn *ssh.Client, args []string) {
+	if len(args) != 3 {
+		fmt.Fprintln(os.Stderr, "USAGE: puts outbox/[pattern] to sentbox")
+		fmt.Fprintln(os.Stderr, "       note that outbox must end in a / unless it has a match pattern")
+		return
+	}
+
+	frm, m := path.Split(args[0])
+	remote := args[1]
+	sent := args[2]
+
+	if m == "" {
+		m = "*"
+	}
+
+	c, err := sftp.NewClient(conn)
+	if err != nil {
+		panic(err)
+	}
+	defer c.Close()
+
+	fmt.Println(frm, m, remote, sent) //TODO: remove
+
+	//TODO
 }
 
 func init() {
@@ -47,16 +129,24 @@ func main() {
 	username := connection[0]
 	address := connection[1]
 
-	config := &ssh.ClientConfig{
-		User: username,
-	}
+	var auths []ssh.AuthMethod
 
 	if keyfile != "" {
-		config.Auth = []ssh.AuthMethod{ ssh.Password(password) }
-	} else if password != "" {
-		config.Auth = []ssh.AuthMethod{ ssh.Password(password) }
-	} else {
+		//TODO: open keyfile
+		auths = append(auths, ssh.Password(password))
+	}
+
+	if password != "" {
+		auths = append(auths, ssh.Password(password))
+	}
+
+	if password == "" && keyfile == "" {
 		fmt.Fprintln(os.Stderr, "Need password or keyfile")
+	}
+
+	config := &ssh.ClientConfig{
+		User: username,
+		Auth: auths,
 	}
 
 	hasPort, err := regexp.MatchString(".+:\\d+", address)
@@ -70,30 +160,27 @@ func main() {
 
 	fmt.Println(username, address)
 
-	client, err = ssh.Dial("tcp", address, config)
+	client, err := ssh.Dial("tcp", address, config)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to connect to server")
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
+	defer client.Close()
 
 	//split strings with escape of \ for spaces in arguments
 	r := regexp.MustCompile("(\\\\.|[^\\s])+")
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		input := scanner.Text()
-		//TODO: read gets and puts commands here
 		args := r.FindAllString(input, -1)
 		switch cmd := args[0]; cmd {
 		case "gets":
-			//gets remotedir localdir otherdirs
-			fmt.Println("Doing a gets command")
+			gets(client, args[1:])
 		case "puts":
-			//puts localdir remotedir local_sent_dir
-			fmt.Println("Doing a puts command")
+			puts(client, args[1:])
 		case "list":
-			//list remotedir
-			fmt.Println("Doing a list command")
+			list(client, args[1:])
 		default:
 			fmt.Println("Unknown command: %s", cmd)
 		}
