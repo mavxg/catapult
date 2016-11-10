@@ -1,24 +1,29 @@
 # Catapult
 
-Catapult lets you approximate messaging over sftp. Catapult has just three commands `open`, `puts`, `gets`. Of those, `gets` is the reason for catapult's existance.
+Catapult lets you approximate messaging over sftp. Catapult has just three commands `list`, `puts`, `gets`. Of those, `gets` is the reason for catapult's existance.
 
-## open
+## Usage
 
-    open {connection details}
+    catapult -keyfile ~/.ssh/id_rsa -passphrase ... user@server:port
+    catapult -password ... user@server:port
 
-`open` creates a connection with the remote sftp server you want to send or receive messages to/from.
+## list
+
+    list remotepath/[pattern]
+
+`list` the files (or directories) in the remotepath that match the given pattern (default is all files)
 
 ## puts
 
-    puts localpath remotepath donepath
+    puts localpath/[pattern] remotepath donepath
 
-`puts` uploads all the files it finds in `localpath` to the remote directory `remotepath`. After uploading each file it move that file to `donepath`.
+`puts` uploads all the files in `localpath` (that match `pattern`) to the remote directory `remotepath`. After uploading each file is moved to `donepath`.
 
 ### Example puts useage
 
     puts ./outbox somedir ./sent
 
-Messages you want to send are placed in `./outbox`. After puts has run `./sent` will contain all the uploaded messages. A follow up process then does what it needs (e.g. marks messages as sent in your database) and moves the messages to somewhere like `./archived/{todays date}`.
+Messages you want to send are placed in `./outbox`. After `puts` has run `./sent` will contain all the uploaded messages. A follow up process then does what it needs (e.g. marks messages as sent in your database) and moves the messages to somewhere like `./archived/{todays date}`.
 
 ## gets
 

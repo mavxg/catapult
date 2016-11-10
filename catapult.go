@@ -1,8 +1,6 @@
 package main
 
 import (
-	//"byte"
-	//"crypto/x509"
 	"bufio"
 	"crypto/x509"
 	"encoding/pem"
@@ -27,9 +25,9 @@ var passphrase string
 var keyfile string
 
 func usage() {
-	fmt.Fprintf(os.Stderr,"catapult <flags> user@server:port\n")
-	fmt.Fprintln(os.Stderr,"")
-	fmt.Fprintln(os.Stderr,"Note: flags must come before connection string")
+	fmt.Fprintf(os.Stderr, "catapult <flags> user@server:port\n")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Note: flags must come before connection string")
 }
 
 func list(conn *ssh.Client, args []string) {
@@ -55,9 +53,9 @@ func list(conn *ssh.Client, args []string) {
 		fmt.Fprintln(os.Stderr, err)
 		return
 	}
-	for _,file := range files {
+	for _, file := range files {
 		name := file.Name()
-		matched,_ := path.Match(m, name)
+		matched, _ := path.Match(m, name)
 		if matched {
 			fmt.Println(path.Join(p, name))
 		}
@@ -89,7 +87,7 @@ func get(client *sftp.Client, src string, dest string) error {
 func exists(name string, alts []string) (bool, error) {
 	for _, a := range alts {
 		full := path.Join(a, name)
-		_,err := os.Stat(full)
+		_, err := os.Stat(full)
 		if !(os.IsNotExist(err)) {
 			return true, err
 		}
@@ -124,16 +122,14 @@ func gets(conn *ssh.Client, args []string) {
 	}
 	defer c.Close()
 
-	fmt.Println(frm, m, local, alts) //TODO: remove
-
 	files, err := c.ReadDir(frm)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return
 	}
-	for _,file := range files {
+	for _, file := range files {
 		name := file.Name()
-		matched,_ := path.Match(m, name)
+		matched, _ := path.Match(m, name)
 		if matched {
 			done, err := exists(name, alts)
 			if err != nil {
@@ -203,15 +199,14 @@ func puts(conn *ssh.Client, args []string) {
 	}
 	defer c.Close()
 
-	fmt.Println(frm, m, remote, sent) //TODO: remove
 	files, err := ioutil.ReadDir(frm)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return
 	}
-	for _,file := range files {
+	for _, file := range files {
 		name := file.Name()
-		matched,_ := path.Match(m, name)
+		matched, _ := path.Match(m, name)
 		if matched {
 			src := path.Join(frm, name)
 			dest := path.Join(remote, name)
@@ -276,13 +271,13 @@ func ParsePrivateKey(file string, passphrase string) (interface{}, error) {
 func main() {
 	flag.Parse()
 
-	if (flag.NArg() != 1) {
+	if flag.NArg() != 1 {
 		usage()
 		os.Exit(2)
 	}
 
 	connection := strings.SplitN(flag.Arg(0), "@", 2)
-	if (len(connection) != 2) {
+	if len(connection) != 2 {
 		usage()
 		os.Exit(2)
 	}
@@ -324,8 +319,6 @@ func main() {
 	if !hasPort {
 		address = address + ":22"
 	}
-
-	fmt.Println(username, address)
 
 	client, err := ssh.Dial("tcp", address, config)
 	if err != nil {
