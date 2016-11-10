@@ -64,6 +64,39 @@ func list(conn *ssh.Client, args []string) {
 	}
 }
 
+func get(client *sftp.Client, src string, dest string) error {
+	srcFile, err := client.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	destFile, err := os.Create(dest) //note, will truncate existing
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	bytes, err := srcFile.WriteTo(destFile)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("GET: %s %s %dbytes\n", src, dest, bytes)
+	return nil
+}
+
+func exists(name string, alts []string) (bool, error) {
+	for _, a := range alts {
+		full := path.Join(a, name)
+		_,err := os.Stat(full)
+		if !(os.IsNotExist(err)) {
+			return true, err
+		}
+	}
+	return false, nil
+}
+
 func gets(conn *ssh.Client, args []string) {
 	if len(args) < 2 {
 		fmt.Fprintln(os.Stderr, "USAGE: gets from/[pattern] to [alts]")
@@ -102,7 +135,21 @@ func gets(conn *ssh.Client, args []string) {
 		name := file.Name()
 		matched,_ := path.Match(m, name)
 		if matched {
-			//TODO: get the file
+			done, err := exists(name, alts)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed to check existence: ", name, err)
+				continue //move on to next file
+			}
+			if done {
+				//already have this file
+				continue
+			}
+			src := path.Join(frm, name)
+			dest := path.Join(local, name)
+			err = get(c, src, dest)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed get the file: ", name)
+			}
 		}
 	}
 }
