@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -106,6 +107,28 @@ func gets(conn *ssh.Client, args []string) {
 	}
 }
 
+func put(client *sftp.Client, src string, dest string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	destFile, err := client.Create(dest) //note, will truncate existing
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	bytes, err := io.Copy(destFile, srcFile)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("PUT: %s %s %dbytes\n", src, dest, bytes)
+	return nil
+}
+
 func puts(conn *ssh.Client, args []string) {
 	if len(args) != 3 {
 		fmt.Fprintln(os.Stderr, "USAGE: puts outbox/[pattern] to sentbox")
@@ -143,8 +166,18 @@ func puts(conn *ssh.Client, args []string) {
 		name := file.Name()
 		matched,_ := path.Match(m, name)
 		if matched {
-			//TODO: put the file
-			//move to sent box
+			src := path.Join(frm, name)
+			dest := path.Join(remote, name)
+			archive := path.Join(sent, name)
+			err = put(c, src, dest)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed to send: ", name, err)
+				continue //move on to next file
+			}
+			err = os.Rename(src, archive)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed to move file to sent: ", name)
+			}
 		}
 	}
 }
@@ -221,8 +254,6 @@ func main() {
 			panic(err)
 		}
 		auths = append(auths, ssh.PublicKeys(signer))
-
-		os.Exit(0)
 	}
 
 	if password != "" {

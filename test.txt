@@ -1,4 +1,4 @@
-gets /outbound/MRA02/ /Endpoints/Test/inbox/ /Endpoints/Test/processed/ /Endpoints/Test/error/
-puts /Temp/ /MRA01/ /Endpoints/Test/sent/
-list /outbound/MRA02/
-list /M*
+list share/outbound/MRA02/*.txt
+gets share/outbound/MRA02/*.txt /Endpoints/Test/inbox/ /Endpoints/Test/processed/ /Endpoints/Test/error/
+puts /Endpoints/Test/outbox/*.txt share/MRA01/ /Endpoints/Test/sent/
+list /
