@@ -224,21 +224,6 @@ func puts(conn *ssh.Client, args []string) {
 	}
 }
 
-func remove(client *sftp.Client, dest string) error {
-	destFile, err := client.Create(dest) //note, will truncate existing
-	if err != nil {
-		return err
-	}
-	defer destFile.Close()
-
-	bytes, err := io.Copy(destFile, srcFile)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("PUT: %s %s %dbytes\n", src, dest, bytes)
-	return nil
-}
 
 //Remove files that exist 
 func clean(conn *ssh.Client, args []string) {
@@ -414,7 +399,7 @@ func main() {
 		case "list":
 			list(client, args[1:])
 		case "clean":
-			fmt.Println("TODO: implement clean")
+			clean(client, args[1:])
 		default:
 			fmt.Println("Unknown command: %s", cmd)
 		}

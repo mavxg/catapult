@@ -2,6 +2,10 @@
 
 Catapult lets you approximate messaging over sftp. Catapult has just three commands `list`, `puts`, `gets`. Of those, `gets` is the reason for catapult's existance.
 
+## TODO
+
+* [ ] check fingerprint of server
+
 ## Usage
 
     catapult -keyfile ~/.ssh/id_rsa -passphrase ... user@server:port
@@ -23,11 +27,11 @@ Catapult lets you approximate messaging over sftp. Catapult has just three comma
 
     puts ./outbox somedir ./sent
 
-Messages you want to send are placed in `./outbox`. After `puts` has run `./sent` will contain all the uploaded messages. A follow up process then does what it needs (e.g. marks messages as sent in your database) and moves the messages to somewhere like `./archived/{todays date}`.
+Messages you want to send are placed in `./outbox`. After `puts` has run `./sent` will contain all the uploaded messages. A follow up process then does what it needs (e.g. marks messages as sent in your database) and moves the messages to somewhere like `./archived/{todays date}` or deletes them.
 
 ## gets
 
-     gets remotepath localpath [, ...altpaths]
+    gets remotepath localpath [, ...altpaths]
 
 `gets` downloads all the files it finds at `remotepath` that are not in `localpath` or in any other local paths given as `altpaths`.
 
@@ -38,6 +42,12 @@ Messages you want to send are placed in `./outbox`. After `puts` has run `./sent
 
 Get will download files that match `results/*.asc` on the remote server into `./inbox` iff and only if they are not in any of `./inbox`, `./processed`, or `./failed`. A follow up job can then process all the matching files it finds in `./inbox` and move the files it has finished with into another directory (in this case `./processed` or `./failed`). This lets you decouple the dowload from the post processing without need a specific list of downloaded files or a mirror directory with fragile coupled (i.e. you get a list of newly downloaded files) postprocessing.
 
+
+## clean
+
+    clean remotepath localpath/[pattern]
+
+Clean removes files that are at both the server and in the local directory. This can be used to delete downloaded and processed files.
 
 ### Docker testing
 
