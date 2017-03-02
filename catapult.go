@@ -224,10 +224,82 @@ func puts(conn *ssh.Client, args []string) {
 	}
 }
 
+func remove(client *sftp.Client, dest string) error {
+	destFile, err := client.Create(dest) //note, will truncate existing
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	bytes, err := io.Copy(destFile, srcFile)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("PUT: %s %s %dbytes\n", src, dest, bytes)
+	return nil
+}
+
+//Remove files that exist 
+func clean(conn *ssh.Client, args []string) {
+	if len(args) != 2 {
+		fmt.Fprintln(os.Stderr, "USAGE: clean remote_path/ local_processed_path/[pattern]")
+		fmt.Fprintln(os.Stderr, "       processed path must end in a / or pattern")
+		return
+	}
+
+	remote := args[0]
+	local,lm := path.Split(args[1])
+
+	if m == "" {
+		m = "*"
+	}
+
+	if lm == "" {
+		lm = "*"
+	}
+
+	ls, err := os.Stat(local)
+	if err != nil || !(ls.IsDir()) {
+		fmt.Fprintln(os.Stderr, "processed directory doesn't exist")
+		return
+	}
+
+	c, err := sftp.NewClient(conn)
+	if err != nil {
+		panic(err)
+	}
+	defer c.Close()
+
+	files, err := ioutil.ReadDir(local)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	for _, file := range files {
+		name := file.Name()
+		matched, _ := path.Match(m, name)
+		if matched {
+			src := path.Join(local, name)
+			dest := path.Join(remote, name)
+			err = c.removeFile(dest)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed to remove remote file: ", dest, err)
+				continue //move on to next file ??? Do we want to remove processed
+			}
+			err = os.Remove(src)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed to remove local file: ", src, err)
+			}
+		}
+	}
+}
+
 func init() {
 	flag.StringVar(&password, "password", "", "password for sftp connection")
 	flag.StringVar(&passphrase, "passphrase", "", "passphrase for keyfile")
 	flag.StringVar(&keyfile, "keyfile", "", "keyfile path")
+	flag.StringVar(&fingerprint, "", "fingerprint of server")
 }
 
 func encryptedBlock(block *pem.Block) bool {
@@ -341,6 +413,8 @@ func main() {
 			puts(client, args[1:])
 		case "list":
 			list(client, args[1:])
+		case "clean":
+			fmt.Println("TODO: implement clean")
 		default:
 			fmt.Println("Unknown command: %s", cmd)
 		}
