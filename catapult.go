@@ -13,16 +13,18 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"net"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
-//catapult [-keyfile=... [-passphrase=..] | -password=.. ] user@server:port
+//catapult [-keyfile=... [-passphrase=..] | -password=.. ] [-fingerprint=..] user@server:port
 
 var password string
 var passphrase string
 var keyfile string
+var fingerprint string
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "catapult <flags> user@server:port\n")
@@ -234,14 +236,10 @@ func clean(conn *ssh.Client, args []string) {
 	}
 
 	remote := args[0]
-	local,lm := path.Split(args[1])
+	local,m := path.Split(args[1])
 
 	if m == "" {
 		m = "*"
-	}
-
-	if lm == "" {
-		lm = "*"
 	}
 
 	ls, err := os.Stat(local)
@@ -267,7 +265,7 @@ func clean(conn *ssh.Client, args []string) {
 		if matched {
 			src := path.Join(local, name)
 			dest := path.Join(remote, name)
-			err = c.removeFile(dest)
+			err = c.Remove(dest)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "Failed to remove remote file: ", dest, err)
 				continue //move on to next file ??? Do we want to remove processed
@@ -284,7 +282,7 @@ func init() {
 	flag.StringVar(&password, "password", "", "password for sftp connection")
 	flag.StringVar(&passphrase, "passphrase", "", "passphrase for keyfile")
 	flag.StringVar(&keyfile, "keyfile", "", "keyfile path")
-	flag.StringVar(&fingerprint, "", "fingerprint of server")
+	flag.StringVar(&fingerprint, "fingerprint", "", "fingerprint of server")
 }
 
 func encryptedBlock(block *pem.Block) bool {
@@ -323,6 +321,14 @@ func ParsePrivateKey(file string, passphrase string) (interface{}, error) {
 	}
 
 	return ssh.ParseRawPrivateKey(pemBytes)
+}
+
+// CheckHostKey checks a host key certificate. This method can be
+// plugged into ClientConfig.HostKeyCallback.
+func CheckHostKey(addr string, remote net.Addr, key ssh.PublicKey) error {
+	fmt.Fprintf(os.Stderr, "Server key %q\n", key)
+
+	return nil
 }
 
 func main() {
@@ -366,6 +372,7 @@ func main() {
 	config := &ssh.ClientConfig{
 		User: username,
 		Auth: auths,
+		HostKeyCallback: CheckHostKey,
 	}
 
 	hasPort, err := regexp.MatchString(".+:\\d+", address)
