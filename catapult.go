@@ -32,6 +32,8 @@ var daemon bool
 var script string
 var localDir string
 
+var gpgPassphrase string
+
 var splitEscSpace *regexp.Regexp
 
 func usage() {
@@ -250,6 +252,46 @@ func sleep(args []string) {
 	time.Sleep(time.Duration(seconds) * time.Second)
 }
 
+func decrypt(args []string) {
+	if len(args) != 3 {
+		fmt.Fprintln(os.Stderr, "USAGE: decrypt src/[pattern] dest error")
+		return
+	}
+	fmt.Fprintf(os.Stderr, "decrypt not implemented")
+}
+
+func encrypt(args []string) {
+	if len(args) != 3 {
+		fmt.Fprintln(os.Stderr, "USAGE: encrypt src/[pattern] dest to")
+		return
+	}
+	fmt.Fprintf(os.Stderr, "encrypt not implemented")
+}
+
+func copy_(args []string) {
+	if len(args) != 2 {
+		fmt.Fprintln(os.Stderr, "USAGE: copy src/[pattern] dest")
+		return
+	}
+	fmt.Fprintf(os.Stderr, "copy not implemented")
+}
+
+func move(args []string) {
+	if len(args) != 2 {
+		fmt.Fprintln(os.Stderr, "USAGE: move src/[pattern] dest")
+		return
+	}
+	fmt.Fprintf(os.Stderr, "move not implemented")
+}
+
+func delete_(args []string) {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "USAGE: delete src/[pattern]")
+		return
+	}
+	fmt.Fprintf(os.Stderr, "delete not implemented")
+}
+
 //Remove files that exist 
 func clean(conn *ssh.Client, args []string) {
 	if len(args) != 2 {
@@ -309,6 +351,7 @@ func init() {
 	flag.BoolVar(&daemon, "daemon", false, "daemon mode")
 	flag.StringVar(&script, "script", os.Getenv("CATAPULT_SCRIPTFILE"), "command script")
 	flag.StringVar(&localDir	, "local", os.Getenv("CATAPULT_LOCAL_DIRECTORY"), "local directory")
+	flag.StringVar(&gpgPassphrase, "gpg", os.Getenv("CATAPULT_GPG_PASSPHRASE"), "gpg key passphrase")
 	//split strings with escape of \ for spaces in arguments
 	splitEscSpace = regexp.MustCompile("(\\\\.|[^\\s])+")
 }
@@ -372,8 +415,21 @@ func command(client *ssh.Client, input string) {
 			clean(client, args[1:])
 		case "sleep":
 			sleep(args[1:])
+		case "decrypt":
+			decrypt(args[1:])
+		case "encrypt":
+			encrypt(args[1:])
+		case "copy":
+			copy_(args[1:])
+		case "move":
+			move(args[1:])
+		case "delete":
+			delete_(args[1:])
+		case "open":
+			//open should do nothing if already open...
+			fmt.Fprintf(os.Stderr, "%s not implemented", cmd)
 		default:
-			fmt.Println("Unknown command: %s", cmd)
+			fmt.Fprintf(os.Stderr, "ERROR: Unknown command: %s", cmd)
 		}
 		return
 }
