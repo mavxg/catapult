@@ -11,9 +11,12 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"net"
+	"time"
+	"strconv"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -25,6 +28,10 @@ var password string
 var passphrase string
 var keyfile string
 var fingerprint string
+var daemon bool
+var script string
+
+var splitEscSpace *regexp.Regexp
 
 func usage() {
 	fmt.Fprintf(os.Stderr, "catapult <flags> user@server:port\n")
@@ -34,7 +41,7 @@ func usage() {
 
 func list(conn *ssh.Client, args []string) {
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "USAGE: list/[pattern] dir")
+		fmt.Fprintln(os.Stderr, "USAGE: list dir/[pattern]")
 		return
 	}
 
@@ -226,6 +233,18 @@ func puts(conn *ssh.Client, args []string) {
 	}
 }
 
+func sleep(args []string) {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "USAGE: sleep seconds")
+		return
+	}
+	seconds, err := strconv.Atoi(args[0])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "USAGE: sleep seconds -- seconds must be a number")
+		return
+	}
+	time.Sleep(time.Duration(seconds) * time.Second)
+}
 
 //Remove files that exist 
 func clean(conn *ssh.Client, args []string) {
@@ -283,6 +302,11 @@ func init() {
 	flag.StringVar(&passphrase, "passphrase", "", "passphrase for keyfile")
 	flag.StringVar(&keyfile, "keyfile", "", "keyfile path")
 	flag.StringVar(&fingerprint, "fingerprint", "", "server fingerprint")
+	flag.BoolVar(&daemon, "daemon", false, "daemon mode")
+	flag.StringVar(&script, "script", "-", "command script")
+
+	//split strings with escape of \ for spaces in arguments
+	splitEscSpace = regexp.MustCompile("(\\\\.|[^\\s])+")
 }
 
 func encryptedBlock(block *pem.Block) bool {
@@ -334,6 +358,25 @@ func CheckHostKey(addr string, remote net.Addr, key ssh.PublicKey) error {
 		return errors.New("Server key doesn't match")
 	}
 	return nil
+}
+
+func command(client *ssh.Client, input string) {
+		args := splitEscSpace.FindAllString(input, -1)
+		switch cmd := args[0]; cmd {
+		case "gets":
+			gets(client, args[1:])
+		case "puts":
+			puts(client, args[1:])
+		case "list":
+			list(client, args[1:])
+		case "clean":
+			clean(client, args[1:])
+		case "sleep":
+			sleep(args[1:])
+		default:
+			fmt.Println("Unknown command: %s", cmd)
+		}
+		return
 }
 
 func main() {
@@ -397,23 +440,41 @@ func main() {
 	}
 	defer client.Close()
 
-	//split strings with escape of \ for spaces in arguments
-	r := regexp.MustCompile("(\\\\.|[^\\s])+")
-	scanner := bufio.NewScanner(os.Stdin)
-	for scanner.Scan() {
-		input := scanner.Text()
-		args := r.FindAllString(input, -1)
-		switch cmd := args[0]; cmd {
-		case "gets":
-			gets(client, args[1:])
-		case "puts":
-			puts(client, args[1:])
-		case "list":
-			list(client, args[1:])
-		case "clean":
-			clean(client, args[1:])
-		default:
-			fmt.Println("Unknown command: %s", cmd)
+	var reader io.Reader 
+	reader = os.Stdin
+	if script != "-" {
+		absPath, _ := filepath.Abs(script)
+		src, err := os.Open(absPath)
+		defer src.Close()
+		reader = src
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Failed to open script file")
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+	} else if daemon {
+		reader = strings.NewReader(os.Getenv("CATAPULT_DAEMON_SCRIPT"))
+	}
+
+	scanner := bufio.NewScanner(reader)
+	if daemon {
+		var commands []string
+		for scanner.Scan() {
+			commands = append(commands, scanner.Text())
+		}
+		if len(commands) < 1 {
+			fmt.Fprintln(os.Stderr, "Command script empty")
+			os.Exit(2)
+		}
+		for {
+			for _, line := range commands {
+				command(client, line)
+			}
+		}
+	} else {
+		for scanner.Scan() {
+			input := scanner.Text()
+			command(client, input)
 		}
 	}
 }
