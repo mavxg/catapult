@@ -298,12 +298,12 @@ func clean(conn *ssh.Client, args []string) {
 }
 
 func init() {
-	flag.StringVar(&password, "password", "", "password for sftp connection")
-	flag.StringVar(&passphrase, "passphrase", "", "passphrase for keyfile")
-	flag.StringVar(&keyfile, "keyfile", "", "keyfile path")
-	flag.StringVar(&fingerprint, "fingerprint", "", "server fingerprint")
+	flag.StringVar(&password, "password", os.Getenv("CATAPULT_PASSWORD"), "password for sftp connection")
+	flag.StringVar(&passphrase, "passphrase", os.Getenv("CATAPULT_PASSPHRASE"), "passphrase for keyfile")
+	flag.StringVar(&keyfile, "keyfile", os.Getenv("CATAPULT_PASSPHRASE"), "keyfile path")
+	flag.StringVar(&fingerprint, "fingerprint", os.Getenv("CATAPULT_FINGERPRINT"), "server fingerprint")
 	flag.BoolVar(&daemon, "daemon", false, "daemon mode")
-	flag.StringVar(&script, "script", "-", "command script")
+	flag.StringVar(&script, "script", os.Getenv("CATAPULT_SCRIPTFILE"), "command script")
 
 	//split strings with escape of \ for spaces in arguments
 	splitEscSpace = regexp.MustCompile("(\\\\.|[^\\s])+")
@@ -354,7 +354,7 @@ func CheckHostKey(addr string, remote net.Addr, key ssh.PublicKey) error {
 	if fingerprint == "" {
 		fmt.Fprintf(os.Stderr, "INFO: Server host key: %q\n", hostkey)
 	} else if fingerprint != hostkey {
-		fmt.Fprintf(os.Stderr, "ERROR: Server host key: %q doesn't match fingerprint\n", hostkey)
+		fmt.Fprintf(os.Stderr, "ERROR: Server host key: %q doesn't match fingerprint\n       given:           %q\n", hostkey, fingerprint)
 		return errors.New("Server key doesn't match")
 	}
 	return nil
@@ -442,7 +442,7 @@ func main() {
 
 	var reader io.Reader
 	reader = os.Stdin
-	if script != "-" {
+	if script != "" {
 		absPath, _ := filepath.Abs(script)
 		src, err := os.Open(absPath)
 		defer src.Close()
