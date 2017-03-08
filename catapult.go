@@ -19,7 +19,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-//catapult [-keyfile=... [-passphrase=..] | -password=.. ] [-fingerprint=..] user@server:port
+//catapult [-keyfile=... [-passphrase=..] | -password=.. ] user@server:port
 
 var password string
 var passphrase string
@@ -282,7 +282,7 @@ func init() {
 	flag.StringVar(&password, "password", "", "password for sftp connection")
 	flag.StringVar(&passphrase, "passphrase", "", "passphrase for keyfile")
 	flag.StringVar(&keyfile, "keyfile", "", "keyfile path")
-	flag.StringVar(&fingerprint, "fingerprint", "", "fingerprint of server")
+	flag.StringVar(&fingerprint, "fingerprint", "", "server fingerprint")
 }
 
 func encryptedBlock(block *pem.Block) bool {
@@ -326,8 +326,13 @@ func ParsePrivateKey(file string, passphrase string) (interface{}, error) {
 // CheckHostKey checks a host key certificate. This method can be
 // plugged into ClientConfig.HostKeyCallback.
 func CheckHostKey(addr string, remote net.Addr, key ssh.PublicKey) error {
-	fmt.Fprintf(os.Stderr, "Server key %q\n", key)
-
+	hostkey := fmt.Sprintf("%s %s", key.Type(), ssh.FingerprintSHA256(key))
+	if fingerprint == "" {
+		fmt.Fprintf(os.Stderr, "INFO: Server host key: %q\n", hostkey)
+	} else if fingerprint != hostkey {
+		fmt.Fprintf(os.Stderr, "ERROR: Server host key: %q doesn't match fingerprint\n", hostkey)
+		return errors.New("Server key doesn't match")
+	}
 	return nil
 }
 
@@ -362,8 +367,13 @@ func main() {
 	}
 
 	if password != "" {
-		auths = append(auths, ssh.Password(password))
+		pwa := ssh.Password(password)
+		fmt.Fprintln(os.Stderr, password)
+		fmt.Fprintf(os.Stderr, "Auths %q\n", pwa)
+		auths = append(auths, pwa)
 	}
+
+	
 
 	if password == "" && keyfile == "" {
 		fmt.Fprintln(os.Stderr, "Need password or keyfile")
