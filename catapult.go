@@ -367,13 +367,8 @@ func main() {
 	}
 
 	if password != "" {
-		pwa := ssh.Password(password)
-		fmt.Fprintln(os.Stderr, password)
-		fmt.Fprintf(os.Stderr, "Auths %q\n", pwa)
-		auths = append(auths, pwa)
+		auths = append(auths, ssh.Password(password))
 	}
-
-	
 
 	if password == "" && keyfile == "" {
 		fmt.Fprintln(os.Stderr, "Need password or keyfile")
