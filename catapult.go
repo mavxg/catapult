@@ -30,6 +30,7 @@ var keyfile string
 var fingerprint string
 var daemon bool
 var script string
+var localDir string
 
 var splitEscSpace *regexp.Regexp
 
@@ -95,6 +96,7 @@ func get(client *sftp.Client, src string, dest string) error {
 
 func exists(name string, alts []string) (bool, error) {
 	for _, a := range alts {
+		a, _ = filepath.Abs(a)
 		full := path.Join(a, name)
 		_, err := os.Stat(full)
 		if !(os.IsNotExist(err)) {
@@ -115,9 +117,11 @@ func gets(conn *ssh.Client, args []string) {
 	local := args[1]
 	alts := args[1:] //include local in this to simplify logic
 
+	local, _ = filepath.Abs(local)
+
 	ls, err := os.Stat(local)
 	if err != nil || !(ls.IsDir()) {
-		fmt.Fprintln(os.Stderr, "local (to) directory doesn't exist")
+		fmt.Fprintf(os.Stderr, "local (to) directory doesn't exist: %q\n", local)
 		return
 	}
 
@@ -300,11 +304,11 @@ func clean(conn *ssh.Client, args []string) {
 func init() {
 	flag.StringVar(&password, "password", os.Getenv("CATAPULT_PASSWORD"), "password for sftp connection")
 	flag.StringVar(&passphrase, "passphrase", os.Getenv("CATAPULT_PASSPHRASE"), "passphrase for keyfile")
-	flag.StringVar(&keyfile, "keyfile", os.Getenv("CATAPULT_PASSPHRASE"), "keyfile path")
+	flag.StringVar(&keyfile, "keyfile", os.Getenv("CATAPULT_KEYFILE"), "keyfile path")
 	flag.StringVar(&fingerprint, "fingerprint", os.Getenv("CATAPULT_FINGERPRINT"), "server fingerprint")
 	flag.BoolVar(&daemon, "daemon", false, "daemon mode")
 	flag.StringVar(&script, "script", os.Getenv("CATAPULT_SCRIPTFILE"), "command script")
-
+	flag.StringVar(&localDir	, "local", os.Getenv("CATAPULT_LOCAL_DIRECTORY"), "local directory")
 	//split strings with escape of \ for spaces in arguments
 	splitEscSpace = regexp.MustCompile("(\\\\.|[^\\s])+")
 }
@@ -387,6 +391,16 @@ func main() {
 		os.Exit(2)
 	}
 
+	if script != "" {
+		script, _ = filepath.Abs(script)
+	}
+
+	if localDir != ""	{
+		os.Chdir(localDir)
+	} else if script != "" {
+		os.Chdir(filepath.Dir(script))
+	}
+
 	connection := strings.SplitN(flag.Arg(0), "@", 2)
 	if len(connection) != 2 {
 		usage()
@@ -443,8 +457,7 @@ func main() {
 	var reader io.Reader
 	reader = os.Stdin
 	if script != "" {
-		absPath, _ := filepath.Abs(script)
-		src, err := os.Open(absPath)
+		src, err := os.Open(script)
 		defer src.Close()
 		reader = src
 		if err != nil {

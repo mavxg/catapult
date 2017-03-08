@@ -23,7 +23,7 @@ Catapult lets you approximate messaging over sftp. Catapult has just three comma
 
 `puts` uploads all the files in `localpath` (that match `pattern`) to the remote directory `remotepath`. After uploading each file is moved to `donepath`.
 
-### Example puts useage
+### Example puts usage
 
     puts ./outbox somedir ./sent
 
@@ -36,7 +36,7 @@ Messages you want to send are placed in `./outbox`. After `puts` has run `./sent
 `gets` downloads all the files it finds at `remotepath` that are not in `localpath` or in any other local paths given as `altpaths`.
 
 
-### Example gets useage
+### Example gets usage
 
     gets results/*.asc ./inbox ./processed ./failed
 
@@ -48,6 +48,29 @@ Get will download files that match `results/*.asc` on the remote server into `./
     clean remotepath localpath/[pattern]
 
 Clean removes files that are at both the server and in the local directory. This can be used to delete downloaded and processed files.
+
+## sleep
+
+    sleep seconds
+
+Sleep downs tools for given duration in seconds.
+
+### Example sleep usage
+
+    sleep 30
+
+Sleep 30 will keep the connection open but not perform any action for 30 seconds.
+
+
+# Environment Variables
+    
+    CATAPULT_PASSWORD
+    CATAPULT_PASSPHRASE
+    CATAPULT_KEYFILE
+    CATAPULT_FINGERPRINT
+    CATAPULT_SCRIPTFILE
+    CATAPULT_LOCAL_DIRECTORY
+    CATAPULT_DAEMON_SCRIPT
 
 ### Docker testing
 
