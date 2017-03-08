@@ -440,7 +440,7 @@ func main() {
 	}
 	defer client.Close()
 
-	var reader io.Reader 
+	var reader io.Reader
 	reader = os.Stdin
 	if script != "-" {
 		absPath, _ := filepath.Abs(script)

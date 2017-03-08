@@ -1,0 +1,5 @@
+list /outbound/VPR01/
+list /outbound/VPR02/
+sleep 5
+list /outbound/
+sleep 5
