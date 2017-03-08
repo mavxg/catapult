@@ -317,12 +317,7 @@ func encryptedBlock(block *pem.Block) bool {
 	return strings.Contains(block.Headers["Proc-Type"], "ENCRYPTED")
 }
 
-func ParsePrivateKey(file string, passphrase string) (interface{}, error) {
-	pemBytes, err := ioutil.ReadFile(file)
-	if err != nil {
-		return nil, err
-	}
-
+func ParsePrivateKey(pemBytes []byte, passphrase string) (interface{}, error) {
 	block, _ := pem.Decode(pemBytes)
 	if block == nil {
 		return nil, errors.New("ssh: no key found in keyfile")
@@ -409,10 +404,21 @@ func main() {
 	username := connection[0]
 	address := connection[1]
 
+	var err error
 	var auths []ssh.AuthMethod
 
+	privateKey := []byte(os.Getenv("CATAPULT_PRIVATEKEY"))
+
+	//keyfile overrides an environment variable key
 	if keyfile != "" {
-		key, err := ParsePrivateKey(keyfile, passphrase)
+		privateKey, err = ioutil.ReadFile(keyfile)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	if len(privateKey) > 0 {
+		key, err := ParsePrivateKey(privateKey, passphrase)
 		if err != nil {
 			panic(err)
 		}
@@ -422,6 +428,8 @@ func main() {
 		}
 		auths = append(auths, ssh.PublicKeys(signer))
 	}
+
+
 
 	if password != "" {
 		auths = append(auths, ssh.Password(password))

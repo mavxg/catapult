@@ -63,7 +63,7 @@ Sleep 30 will keep the connection open but not perform any action for 30 seconds
 
 
 # Environment Variables
-    
+
     CATAPULT_PASSWORD
     CATAPULT_PASSPHRASE
     CATAPULT_KEYFILE
@@ -71,6 +71,7 @@ Sleep 30 will keep the connection open but not perform any action for 30 seconds
     CATAPULT_SCRIPTFILE
     CATAPULT_LOCAL_DIRECTORY
     CATAPULT_DAEMON_SCRIPT
+    CATAPULT_PRIVATE_KEY
 
 ### Docker testing
 
