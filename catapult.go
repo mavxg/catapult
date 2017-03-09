@@ -31,6 +31,7 @@ var fingerprint string
 var daemon bool
 var script string
 var localDir string
+var client *ssh.Client
 
 var gpgPassphrase string
 
@@ -257,7 +258,7 @@ func decrypt(args []string) {
 		fmt.Fprintln(os.Stderr, "USAGE: decrypt src/[pattern] dest error")
 		return
 	}
-	fmt.Fprintf(os.Stderr, "decrypt not implemented")
+	fmt.Fprintf(os.Stderr, "decrypt not implemented\n")
 }
 
 func encrypt(args []string) {
@@ -265,7 +266,23 @@ func encrypt(args []string) {
 		fmt.Fprintln(os.Stderr, "USAGE: encrypt src/[pattern] dest to")
 		return
 	}
-	fmt.Fprintf(os.Stderr, "encrypt not implemented")
+	fmt.Fprintf(os.Stderr, "encrypt not implemented\n")
+}
+
+func copyFile(src, dst string) error {
+  src_file, err := os.Open(src)
+  if err != nil {
+    return err
+  }
+  defer src_file.Close()
+
+  dst_file, err := os.Create(dst)
+  if err != nil {
+    return err
+  }
+  defer dst_file.Close()
+  _, err = io.Copy(dst_file, src_file)
+  return err
 }
 
 func copy_(args []string) {
@@ -273,7 +290,38 @@ func copy_(args []string) {
 		fmt.Fprintln(os.Stderr, "USAGE: copy src/[pattern] dest")
 		return
 	}
-	fmt.Fprintf(os.Stderr, "copy not implemented")
+	frm, m := path.Split(args[0])
+	target := args[1]
+
+	if m == "" {
+		m = "*"
+	}
+
+	ls, err := os.Stat(target)
+	if err != nil || !(ls.IsDir()) {
+		fmt.Fprintln(os.Stderr, "dest directory doesn't exist")
+		return
+	}
+
+	files, err := ioutil.ReadDir(frm)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	for _, file := range files {
+		name := file.Name()
+		matched, _ := path.Match(m, name)
+		if matched {
+			src := path.Join(frm, name)
+			dest := path.Join(target, name)
+
+			err = copyFile(src, dest)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed to copy: ", src, err)
+				continue //move on to next file
+			}
+		}
+	}
 }
 
 func move(args []string) {
@@ -281,7 +329,42 @@ func move(args []string) {
 		fmt.Fprintln(os.Stderr, "USAGE: move src/[pattern] dest")
 		return
 	}
-	fmt.Fprintf(os.Stderr, "move not implemented")
+	frm, m := path.Split(args[0])
+	target := args[1]
+
+	if m == "" {
+		m = "*"
+	}
+
+	ls, err := os.Stat(target)
+	if err != nil || !(ls.IsDir()) {
+		fmt.Fprintln(os.Stderr, "dest directory doesn't exist")
+		return
+	}
+
+	files, err := ioutil.ReadDir(frm)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	for _, file := range files {
+		name := file.Name()
+		matched, _ := path.Match(m, name)
+		if matched {
+			src := path.Join(frm, name)
+			dest := path.Join(target, name)
+
+			err = copyFile(src, dest)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed to copy (move): ", src, err)
+				continue //move on to next file
+			}
+			err = os.Remove(src)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed delete moved file: ", src)
+			}
+		}
+	}
 }
 
 func delete_(args []string) {
@@ -289,7 +372,28 @@ func delete_(args []string) {
 		fmt.Fprintln(os.Stderr, "USAGE: delete src/[pattern]")
 		return
 	}
-	fmt.Fprintf(os.Stderr, "delete not implemented")
+	frm, m := path.Split(args[0])
+
+	if m == "" {
+		m = "*"
+	}
+
+	files, err := ioutil.ReadDir(frm)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	for _, file := range files {
+		name := file.Name()
+		matched, _ := path.Match(m, name)
+		if matched {
+			src := path.Join(frm, name)
+			err = os.Remove(src)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed delete file: ", src)
+			}
+		}
+	}
 }
 
 //Remove files that exist 
@@ -402,7 +506,7 @@ func CheckHostKey(addr string, remote net.Addr, key ssh.PublicKey) error {
 	return nil
 }
 
-func command(client *ssh.Client, input string) {
+func command(client *ssh.Client, config *ssh.ClientConfig, input string) {
 		args := splitEscSpace.FindAllString(input, -1)
 		switch cmd := args[0]; cmd {
 		case "gets":
@@ -426,21 +530,59 @@ func command(client *ssh.Client, input string) {
 		case "delete":
 			delete_(args[1:])
 		case "open":
-			//open should do nothing if already open...
-			fmt.Fprintf(os.Stderr, "%s not implemented", cmd)
+			if client == nil {
+				open(config, args[1:])
+			}
 		default:
 			fmt.Fprintf(os.Stderr, "ERROR: Unknown command: %s", cmd)
 		}
 		return
 }
 
-func main() {
-	flag.Parse()
+func open(config *ssh.ClientConfig, args []string) {
+	var err error
 
-	if flag.NArg() != 1 {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "USAGE: open username@host")
+		return
+	}
+
+	connection := strings.SplitN(args[0], "@", 2)
+	if len(connection) != 2 {
 		usage()
 		os.Exit(2)
 	}
+	username := connection[0]
+	address := connection[1]
+
+	hasPort, err := regexp.MatchString(".+:\\d+", address)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	if !hasPort {
+		address = address + ":22"
+	}
+
+	config.User = username
+
+	client, err = ssh.Dial("tcp", address, config)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Failed to connect to server")
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	return
+}
+
+func CloseIfOpen() {
+	if client != nil {
+		client.Close()
+	}
+}
+
+func main() {
+	flag.Parse()
 
 	if script != "" {
 		script, _ = filepath.Abs(script)
@@ -451,14 +593,6 @@ func main() {
 	} else if script != "" {
 		os.Chdir(filepath.Dir(script))
 	}
-
-	connection := strings.SplitN(flag.Arg(0), "@", 2)
-	if len(connection) != 2 {
-		usage()
-		os.Exit(2)
-	}
-	username := connection[0]
-	address := connection[1]
 
 	var err error
 	var auths []ssh.AuthMethod
@@ -485,8 +619,6 @@ func main() {
 		auths = append(auths, ssh.PublicKeys(signer))
 	}
 
-
-
 	if password != "" {
 		auths = append(auths, ssh.Password(password))
 	}
@@ -496,27 +628,20 @@ func main() {
 	}
 
 	config := &ssh.ClientConfig{
-		User: username,
+		//User: username,
 		Auth: auths,
 		HostKeyCallback: CheckHostKey,
 	}
 
-	hasPort, err := regexp.MatchString(".+:\\d+", address)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	if flag.NArg() > 1 {
+		usage()
 		os.Exit(2)
-	}
-	if !hasPort {
-		address = address + ":22"
 	}
 
-	client, err := ssh.Dial("tcp", address, config)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Failed to connect to server")
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
+	if flag.NArg() == 1 {
+		open(config, flag.Args())
 	}
-	defer client.Close()
+	defer CloseIfOpen()
 
 	var reader io.Reader
 	reader = os.Stdin
@@ -545,13 +670,13 @@ func main() {
 		}
 		for {
 			for _, line := range commands {
-				command(client, line)
+				command(client, config, line)
 			}
 		}
 	} else {
 		for scanner.Scan() {
 			input := scanner.Text()
-			command(client, input)
+			command(client, config, input)
 		}
 	}
 }
