@@ -20,6 +20,8 @@ import (
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/openpgp"
+	//"golang.org/x/crypto/openpgp/armor"
 )
 
 //catapult [-keyfile=... [-passphrase=..] | -password=.. ] user@server:port
@@ -253,18 +255,113 @@ func sleep(args []string) {
 	time.Sleep(time.Duration(seconds) * time.Second)
 }
 
+func keyring(passphrase string) (openpgp.EntityList, error) {
+	gpg_home := os.Getenv("GPG_HOME")
+	if gpg_home == "" {
+		gpg_home = path.Join(os.Getenv("HOME"), ".gnupg")
+	}
+	secretKeyringFile := path.Join(gpg_home, "secring.gpg")
+	secretKeyringBuffer, err := os.Open(secretKeyringFile)
+	if err != nil {
+		return nil, err
+	}
+	defer secretKeyringBuffer.Close()
+
+	secretKeyring, err := openpgp.ReadKeyRing(secretKeyringBuffer)
+	if err != nil {
+		return nil, err
+	}
+
+	publicKeyringFile := path.Join(gpg_home, "pubring.gpg")
+	publicKeyringBuffer, err := os.Open(publicKeyringFile)
+	if err != nil {
+		return nil, err
+	}
+	defer publicKeyringBuffer.Close()
+
+	keyring, err := openpgp.ReadKeyRing(publicKeyringBuffer)
+	if err != nil {
+		return nil, err
+	}
+
+	//loop over secret keyring and add all keys not encrypted or that we can decrypt with
+	passphraseByte := []byte(passphrase)
+	for _, entity := range secretKeyring {
+		if entity.PrivateKey == nil {
+			continue
+		}
+		if entity.PrivateKey.Encrypted {
+			err = entity.PrivateKey.Decrypt(passphraseByte)
+			if err != nil {
+				continue
+			}
+			for _, subkey := range entity.Subkeys {
+				if subkey.PrivateKey == nil {
+					continue
+				}
+				err = subkey.PrivateKey.Decrypt(passphraseByte)
+				if err != nil {
+					continue
+				}
+			}
+		}
+		keyring = append(keyring, entity)
+	}
+	return keyring, nil
+}
+
+
+func keys(args []string) {
+	if len(args) > 1 {
+		fmt.Fprintln(os.Stderr, "USAGE: keys [passphrase]")
+		return
+	}
+	passphrase := gpgPassphrase
+	if len(args) == 1 {
+		passphrase = args[0]
+	}
+	keys, err := keyring(passphrase)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Failed open keyring: ", err)
+	}
+	for _,key := range keys {
+		if key.PrivateKey != nil {
+			fmt.Fprintln(os.Stderr, "PRIVATE KEY: ", key.PrivateKey.KeyIdShortString())
+		} else if key.PrimaryKey != nil {
+			fmt.Fprintln(os.Stderr, "PUBLIC KEY:  ", key.PrimaryKey.KeyIdShortString())
+		}
+		for _, subkey := range key.Subkeys {
+			if subkey.PrivateKey != nil {
+					fmt.Fprintln(os.Stderr, "    PRIVATE SUB KEY: ", subkey.PrivateKey.KeyIdShortString())
+			} else if subkey.PublicKey  != nil {
+				fmt.Fprintln(os.Stderr, "    PUBLIC SUB KEY:  ", subkey.PublicKey.KeyIdShortString())
+			}
+		}
+	}
+}
+
 func decrypt(args []string) {
 	if len(args) != 3 {
 		fmt.Fprintln(os.Stderr, "USAGE: decrypt src/[pattern] dest error")
 		return
 	}
+	_, err := keyring(gpgPassphrase)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Failed open keyring: ", err)
+	}
 	fmt.Fprintf(os.Stderr, "decrypt not implemented\n")
 }
 
 func encrypt(args []string) {
-	if len(args) != 3 {
-		fmt.Fprintln(os.Stderr, "USAGE: encrypt src/[pattern] dest to")
+	if len(args) < 3 {
+		fmt.Fprintln(os.Stderr, "USAGE: encrypt src/[pattern] dest to [from...]")
+		fmt.Fprintln(os.Stderr, "    where *to* is the key id of recipient")
+		fmt.Fprintln(os.Stderr, "    and *from...* are the signing key ids")
 		return
+	}
+	_, err := keyring(gpgPassphrase)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Failed open keyring: ", err)
 	}
 	fmt.Fprintf(os.Stderr, "encrypt not implemented\n")
 }
@@ -533,6 +630,8 @@ func command(client *ssh.Client, config *ssh.ClientConfig, input string) {
 			if client == nil {
 				open(config, args[1:])
 			}
+		case "keys":
+			keys(args[1:])
 		default:
 			fmt.Fprintf(os.Stderr, "ERROR: Unknown command: %s", cmd)
 		}
