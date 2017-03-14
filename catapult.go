@@ -9,18 +9,18 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
-	"strings"
-	"net"
-	"time"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/pkg/sftp"
-	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/openpgp"
+	"golang.org/x/crypto/ssh"
 	//"golang.org/x/crypto/openpgp/armor"
 )
 
@@ -310,7 +310,6 @@ func keyring(passphrase string) (openpgp.EntityList, error) {
 	return keyring, nil
 }
 
-
 func keys(args []string) {
 	if len(args) > 1 {
 		fmt.Fprintln(os.Stderr, "USAGE: keys [passphrase]")
@@ -324,7 +323,7 @@ func keys(args []string) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed open keyring: ", err)
 	}
-	for _,key := range keys {
+	for _, key := range keys {
 		if key.PrivateKey != nil {
 			fmt.Fprintln(os.Stderr, "PRIVATE KEY: ", key.PrivateKey.KeyIdShortString())
 		} else if key.PrimaryKey != nil {
@@ -332,8 +331,8 @@ func keys(args []string) {
 		}
 		for _, subkey := range key.Subkeys {
 			if subkey.PrivateKey != nil {
-					fmt.Fprintln(os.Stderr, "    PRIVATE SUB KEY: ", subkey.PrivateKey.KeyIdShortString())
-			} else if subkey.PublicKey  != nil {
+				fmt.Fprintln(os.Stderr, "    PRIVATE SUB KEY: ", subkey.PrivateKey.KeyIdShortString())
+			} else if subkey.PublicKey != nil {
 				fmt.Fprintln(os.Stderr, "    PUBLIC SUB KEY:  ", subkey.PublicKey.KeyIdShortString())
 			}
 		}
@@ -349,6 +348,8 @@ func decrypt(args []string) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed open keyring: ", err)
 	}
+	//result, err := armor.Decode(buffer)
+	//md, err := openpgp.ReadMessage(result.Body, keys, nil, nil)
 	fmt.Fprintf(os.Stderr, "decrypt not implemented\n")
 }
 
@@ -367,19 +368,19 @@ func encrypt(args []string) {
 }
 
 func copyFile(src, dst string) error {
-  src_file, err := os.Open(src)
-  if err != nil {
-    return err
-  }
-  defer src_file.Close()
+	src_file, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer src_file.Close()
 
-  dst_file, err := os.Create(dst)
-  if err != nil {
-    return err
-  }
-  defer dst_file.Close()
-  _, err = io.Copy(dst_file, src_file)
-  return err
+	dst_file, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dst_file.Close()
+	_, err = io.Copy(dst_file, src_file)
+	return err
 }
 
 func copy_(args []string) {
@@ -493,7 +494,7 @@ func delete_(args []string) {
 	}
 }
 
-//Remove files that exist 
+//Remove files that exist
 func clean(conn *ssh.Client, args []string) {
 	if len(args) != 2 {
 		fmt.Fprintln(os.Stderr, "USAGE: clean remote_path/ local_processed_path/[pattern]")
@@ -502,7 +503,7 @@ func clean(conn *ssh.Client, args []string) {
 	}
 
 	remote := args[0]
-	local,m := path.Split(args[1])
+	local, m := path.Split(args[1])
 
 	if m == "" {
 		m = "*"
@@ -551,7 +552,7 @@ func init() {
 	flag.StringVar(&fingerprint, "fingerprint", os.Getenv("CATAPULT_FINGERPRINT"), "server fingerprint")
 	flag.BoolVar(&daemon, "daemon", false, "daemon mode")
 	flag.StringVar(&script, "script", os.Getenv("CATAPULT_SCRIPTFILE"), "command script")
-	flag.StringVar(&localDir	, "local", os.Getenv("CATAPULT_LOCAL_DIRECTORY"), "local directory")
+	flag.StringVar(&localDir, "local", os.Getenv("CATAPULT_LOCAL_DIRECTORY"), "local directory")
 	flag.StringVar(&gpgPassphrase, "gpg", os.Getenv("CATAPULT_GPG_PASSPHRASE"), "gpg key passphrase")
 	//split strings with escape of \ for spaces in arguments
 	splitEscSpace = regexp.MustCompile("(\\\\.|[^\\s])+")
@@ -604,38 +605,38 @@ func CheckHostKey(addr string, remote net.Addr, key ssh.PublicKey) error {
 }
 
 func command(client *ssh.Client, config *ssh.ClientConfig, input string) {
-		args := splitEscSpace.FindAllString(input, -1)
-		switch cmd := args[0]; cmd {
-		case "gets":
-			gets(client, args[1:])
-		case "puts":
-			puts(client, args[1:])
-		case "list":
-			list(client, args[1:])
-		case "clean":
-			clean(client, args[1:])
-		case "sleep":
-			sleep(args[1:])
-		case "decrypt":
-			decrypt(args[1:])
-		case "encrypt":
-			encrypt(args[1:])
-		case "copy":
-			copy_(args[1:])
-		case "move":
-			move(args[1:])
-		case "delete":
-			delete_(args[1:])
-		case "open":
-			if client == nil {
-				open(config, args[1:])
-			}
-		case "keys":
-			keys(args[1:])
-		default:
-			fmt.Fprintf(os.Stderr, "ERROR: Unknown command: %s", cmd)
+	args := splitEscSpace.FindAllString(input, -1)
+	switch cmd := args[0]; cmd {
+	case "gets":
+		gets(client, args[1:])
+	case "puts":
+		puts(client, args[1:])
+	case "list":
+		list(client, args[1:])
+	case "clean":
+		clean(client, args[1:])
+	case "sleep":
+		sleep(args[1:])
+	case "decrypt":
+		decrypt(args[1:])
+	case "encrypt":
+		encrypt(args[1:])
+	case "copy":
+		copy_(args[1:])
+	case "move":
+		move(args[1:])
+	case "delete":
+		delete_(args[1:])
+	case "open":
+		if client == nil {
+			open(config, args[1:])
 		}
-		return
+	case "keys":
+		keys(args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "ERROR: Unknown command: %s", cmd)
+	}
+	return
 }
 
 func open(config *ssh.ClientConfig, args []string) {
@@ -687,7 +688,7 @@ func main() {
 		script, _ = filepath.Abs(script)
 	}
 
-	if localDir != ""	{
+	if localDir != "" {
 		os.Chdir(localDir)
 	} else if script != "" {
 		os.Chdir(filepath.Dir(script))
@@ -728,7 +729,7 @@ func main() {
 
 	config := &ssh.ClientConfig{
 		//User: username,
-		Auth: auths,
+		Auth:            auths,
 		HostKeyCallback: CheckHostKey,
 	}
 
