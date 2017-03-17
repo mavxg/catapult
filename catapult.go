@@ -20,8 +20,8 @@ import (
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/openpgp"
+	"golang.org/x/crypto/openpgp/armor"
 	"golang.org/x/crypto/ssh"
-	//"golang.org/x/crypto/openpgp/armor"
 )
 
 //catapult [-keyfile=... [-passphrase=..] | -password=.. ] user@server:port
@@ -339,18 +339,109 @@ func keys(args []string) {
 	}
 }
 
+func moveFile(src, dest string) error {
+	err := copyFile(src, dest)
+	if err != nil {
+		return err
+	}
+	return os.Remove(src)
+}
+
 func decrypt(args []string) {
-	if len(args) != 3 {
-		fmt.Fprintln(os.Stderr, "USAGE: decrypt src/[pattern] dest error")
+	if len(args) != 2 {
+		fmt.Fprintln(os.Stderr, "USAGE: decrypt src/[pattern] dest/[pattern]")
 		return
 	}
-	_, err := keyring(gpgPassphrase)
+	entityList, err := keyring(gpgPassphrase)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed open keyring: ", err)
 	}
-	//result, err := armor.Decode(buffer)
-	//md, err := openpgp.ReadMessage(result.Body, keys, nil, nil)
-	fmt.Fprintf(os.Stderr, "decrypt not implemented\n")
+
+	frm, m := path.Split(args[0])
+	target, tm := path.Split(args[1])
+
+	if m == "" {
+		m = "*"
+	}
+
+	if tm == "" {
+		tm = "*"
+	}
+
+	rsl := len(m) - len(tm)
+
+	if !strings.HasPrefix(m, tm) {
+		fmt.Fprintln(os.Stderr, "dest pattern must be initial substring of src pattern")
+		return
+	}
+
+	ls, err := os.Stat(target)
+	if err != nil || !(ls.IsDir()) {
+		fmt.Fprintln(os.Stderr, "dest directory doesn't exist")
+		return
+	}
+
+	files, err := ioutil.ReadDir(frm)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+
+	for _, file := range files {
+		name := file.Name()
+		matched, _ := path.Match(m, name)
+		if matched {
+			src := path.Join(frm, name)
+			dest := path.Join(target, name[:len(name)-rsl])
+
+			f, err := os.Open(src)
+			defer func() {
+				if f != nil {
+					f.Close()
+				}
+			}()
+
+			block, err := armor.Decode(f)
+
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed to decode encrypted file: ", src, err)
+				continue
+			}
+
+			md, err := openpgp.ReadMessage(block.Body, entityList, nil, nil)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed to read encrypted message: ", src, err)
+				continue
+			}
+
+			out, err := os.Create(dest)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed to create dest file: ", dest, err)
+				continue
+			}
+			defer out.Close()
+
+			//NOTE: if the file was compressed we do not decompress it
+			_, err = io.Copy(out, md.UnverifiedBody)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed to create dest file: ", dest, err)
+				continue
+			}
+			err = out.Sync()
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed sync dest file: ", dest, err)
+			}
+
+			f.Close() //must close before we remove
+
+			err = os.Remove(src)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed delete encrypted source file: ", src, err)
+			}
+
+			fmt.Printf("DECRYPTED: %s %s\n", src, dest)
+		}
+	}
 }
 
 func encrypt(args []string) {
