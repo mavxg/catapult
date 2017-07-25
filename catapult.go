@@ -31,6 +31,7 @@ var passphrase string
 var keyfile string
 var fingerprint string
 var daemon bool
+var restart string
 var script string
 var localDir string
 var client *ssh.Client
@@ -642,6 +643,7 @@ func init() {
 	flag.StringVar(&keyfile, "keyfile", os.Getenv("CATAPULT_KEYFILE"), "keyfile path")
 	flag.StringVar(&fingerprint, "fingerprint", os.Getenv("CATAPULT_FINGERPRINT"), "server fingerprint")
 	flag.BoolVar(&daemon, "daemon", false, "daemon mode")
+	flag.StringVar(&restart, "restart", os.Getenv("CATAPULT_RESTART"), "restart time (todo pattern)")
 	flag.StringVar(&script, "script", os.Getenv("CATAPULT_SCRIPTFILE"), "command script")
 	flag.StringVar(&localDir, "local", os.Getenv("CATAPULT_LOCAL_DIRECTORY"), "local directory")
 	flag.StringVar(&gpgPassphrase, "gpg", os.Getenv("CATAPULT_GPG_PASSPHRASE"), "gpg key passphrase")
@@ -847,11 +849,31 @@ func main() {
 		}
 	} else if daemon {
 		reader = strings.NewReader(os.Getenv("CATAPULT_DAEMON_SCRIPT"))
+
 	}
 
 	scanner := bufio.NewScanner(reader)
 	if daemon {
+		var restartRegex *regexp.Regexp
 		var commands []string
+		var restartTime time.Time
+		restartRegex = regexp.MustCompile(`^(every) (\d+) (hours|mins|minutes)$`) 
+		if (restartRegex.MatchString(restart)) {
+			restartMatches := restartRegex.FindStringSubmatch(restart)
+			restartMultiple,_ := strconv.Atoi(restartMatches[2])
+			var restartDuration time.Duration
+			switch restartMatches[3] {
+			case "hours":
+				restartDuration = time.Hour
+			case "mins", "minutes":
+				restartDuration = time.Minute
+			}
+			restartTime = (time.Now()).Add(restartDuration * time.Duration(restartMultiple))
+		} else {
+			//restart once per week even if no time is given
+			restartTime = (time.Now()).Add(time.Hour * time.Duration(24*7))
+		}
+
 		for scanner.Scan() {
 			commands = append(commands, scanner.Text())
 		}
@@ -862,6 +884,10 @@ func main() {
 		for {
 			for _, line := range commands {
 				command(client, config, line)
+				if ((time.Now()).After(restartTime)) {
+					fmt.Fprintln(os.Stderr, "Restart time passed")
+					os.Exit(0)
+				}
 			}
 		}
 	} else {
