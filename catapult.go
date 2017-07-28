@@ -102,8 +102,13 @@ func get(client *sftp.Client, src string, dest string) error {
 
 func exists(name string, alts []string) (bool, error) {
 	for _, a := range alts {
-		a, _ = filepath.Abs(a)
-		full := path.Join(a, name)
+		var full string
+		if (a.Contains("*")) {
+			full = strings.Replace(a, "*", name, 1)
+		} else {
+			a, _ = filepath.Abs(a)
+			full = path.Join(a, name)
+		}
 		_, err := os.Stat(full)
 		if !(os.IsNotExist(err)) {
 			return true, err
@@ -125,9 +130,9 @@ func gets(conn *ssh.Client, args []string) {
 
 	local, _ = filepath.Abs(local)
 
-	ls, err := os.Stat(local)
-	if err != nil || !(ls.IsDir()) {
-		fmt.Fprintf(os.Stderr, "local (to) directory doesn't exist: %q\n", local)
+	err := os.MkdirAll(local, 0777)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "local (to) directory cannot be created: %q\n", local)
 		return
 	}
 
@@ -376,9 +381,9 @@ func decrypt(args []string) {
 		return
 	}
 
-	ls, err := os.Stat(target)
-	if err != nil || !(ls.IsDir()) {
-		fmt.Fprintln(os.Stderr, "dest directory doesn't exist")
+	err = os.MkdirAll(target, 0777)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "dest directory could not be created")
 		return
 	}
 
@@ -402,14 +407,19 @@ func decrypt(args []string) {
 				}
 			}()
 
+			var reader io.Reader
 			block, err := armor.Decode(f)
 
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "Failed to decode encrypted file: ", src, err)
-				continue
+				//not armored
+				f.Seek(0,0)
+				reader = f
+			} else {
+				reader = block.Body
 			}
 
-			md, err := openpgp.ReadMessage(block.Body, entityList, nil, nil)
+
+			md, err := openpgp.ReadMessage(reader, entityList, nil, nil)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "Failed to read encrypted message: ", src, err)
 				continue
@@ -487,9 +497,9 @@ func copy_(args []string) {
 		m = "*"
 	}
 
-	ls, err := os.Stat(target)
-	if err != nil || !(ls.IsDir()) {
-		fmt.Fprintln(os.Stderr, "dest directory doesn't exist")
+	err := os.MkdirAll(target, 0777)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "dest directory could not be created")
 		return
 	}
 
