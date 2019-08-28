@@ -73,6 +73,10 @@ Sleep 30 will keep the connection open but not perform any action for 30 seconds
     CATAPULT_DAEMON_SCRIPT
     CATAPULT_PRIVATE_KEY
 
+## nice
+
+Use nice to introduce a few seconds delay between put files to mitigate (but not totally fix) race conditions on remote servers. An example would be if the files/messages you are delivering must be processed in order by the server but the server is processing the files in parallel. Note: this doesn't remove the race condition so only use this if the race condition can be detected and fixed when it does occure.
+
 ### Docker testing
 
     docker run -v host/share:/home/foo/share -v host/foo/_ssh/keys/id_rsa.pub:/home/foo/.ssh/keys/id_rsa.pub:ro -p 2222:22 -d atmoz/sftp foo:Paran01d:1001

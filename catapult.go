@@ -35,6 +35,7 @@ var restart string
 var script string
 var localDir string
 var client *ssh.Client
+var nice int
 
 var gpgPassphrase string
 
@@ -103,7 +104,7 @@ func get(client *sftp.Client, src string, dest string) error {
 func exists(name string, alts []string) (bool, error) {
 	for _, a := range alts {
 		var full string
-		if (a.Contains("*")) {
+		if (strings.Contains(a, "*")) {
 			full = strings.Replace(a, "*", name, 1)
 		} else {
 			a, _ = filepath.Abs(a)
@@ -206,6 +207,7 @@ func puts(conn *ssh.Client, args []string) {
 	frm, m := path.Split(args[0])
 	remote := args[1]
 	sent := args[2]
+	first := true
 
 	if m == "" {
 		m = "*"
@@ -235,6 +237,11 @@ func puts(conn *ssh.Client, args []string) {
 			src := path.Join(frm, name)
 			dest := path.Join(remote, name)
 			archive := path.Join(sent, name)
+			if (!first && nice > 0) {
+				//Sleep for {nice} seconds for a slow server
+				time.Sleep(time.Duration(nice) * time.Second)
+			}
+			first = false
 			err = put(c, src, dest)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "Failed to send: ", name, err)
@@ -657,6 +664,7 @@ func init() {
 	flag.StringVar(&script, "script", os.Getenv("CATAPULT_SCRIPTFILE"), "command script")
 	flag.StringVar(&localDir, "local", os.Getenv("CATAPULT_LOCAL_DIRECTORY"), "local directory")
 	flag.StringVar(&gpgPassphrase, "gpg", os.Getenv("CATAPULT_GPG_PASSPHRASE"), "gpg key passphrase")
+	flag.IntVar(&nice, "nice", 0, "seconds delay between put files for slow servers")
 	//split strings with escape of \ for spaces in arguments
 	splitEscSpace = regexp.MustCompile("(\\\\.|[^\\s])+")
 }
